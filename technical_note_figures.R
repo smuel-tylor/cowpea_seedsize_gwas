@@ -77,6 +77,11 @@ mlm_dirs <- str_c("copy_of_MWK_dir/GWAS_Results/Seed ",
 mlm_fp <- map_chr(mlm_dirs, list.files, full.names = TRUE)
 
 gwas_mlm_list <- map(mlm_fp, read_tassel)
+names(gwas_mlm_list) <- str_c(
+  "MLM ",
+  c("density", "length", "cvars", "field", "gh", "width")
+)
+
 #what is n for bonferroni
 unique(map_vec(gwas_mlm_list, nrow)) == n_bfc
 
@@ -91,6 +96,25 @@ gwas_mlm_list_sig <- gwas_mlm_list |>
 #should mean we now have different length sets in each element of the list
 map_vec(gwas_mlm_list_sig, nrow)
 
-a <- map(gwas_blink_list_sig, \(x) x[ , "SNP"])
-names(a) <- c("A", "B", "C", "D", "E", "F")
-upset(fromList(a))
+gwas_mlm_list_snps <- map(gwas_mlm_list_sig, \(x) x[ , "SNP"])
+upset(fromList(gwas_mlm_list_snps))
+
+mlm_blk <- c(gwas_mlm_list_snps, gwas_blink_list_snps)
+a <- upset(fromList(mlm_blk),
+      nsets = length(mlm_blk),
+      sets = names(mlm_blk)[length(mlm_blk):1],
+      # sets = c("BLINK density", "MLM density",
+      #          "BLINK length", "MLM length",
+      #          "BLINK width", "MLM width",
+      #          "BLINK cvars", "MLM cvars",
+      #          "BLINK field", "MLM field",
+      #          "BLINK gh", "MLM gh"
+      # ),
+      keep.order = TRUE,
+      order.by = c("freq"),
+      sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 6)
+)
+
+#need to do psnps
+
+  
