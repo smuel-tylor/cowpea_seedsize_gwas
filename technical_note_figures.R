@@ -31,12 +31,43 @@ blink_fp <- map_chr(blink_dirs, \(x) list.files(x, full.names = TRUE))
 
 gwas_blink_list <- map(blink_fp, read_blink)
 names(gwas_blink_list) <- str_c(
-  "BLINK ",
+  "BLINK_",
   c("density", "length", "cvars", "field", "gh", "width")
 )
-  
+
+#taking as input the list components relevant to the meta-analysis
+#this function carries out the probit transformation
+probit_meta <- function(gwas_list){
+  z_squared <- function(p_value){
+    qnorm(1 - 0.5 * p_value)^2
+  }
+  gwas_list |>
+  map(\(x) x |>
+        arrange(Chromosome, Position) |>
+        mutate(z_sq = z_squared(P.value))) |>
+    list_cbind() |>
+    #the next line is necessary to deal with packed dataframe structure
+    unpack(cols = everything(), names_sep = "_") |>
+    mutate(Chi_sq = rowSums(across(ends_with(".z_sq"))),
+           META_weight_P.value = pchisq(Chi_sq,
+                                        length(gwas_list),
+                                        lower.tail = FALSE
+                                        ),
+           META_neg_log10p = -log(META_weight_P.value, base = 10)
+             )
+}
+
+META <- probit_meta(gwas_blink_list[3:5])
+#checks
+all(META$BLINK_cvars_SNP == META$BLINK_field_SNP)
+all(META$BLINK_cvars_SNP == META$BLINK_gh_SNP)
+META$BLINK_cvars_SNP[META$BLINK_cvars_SNP != META$BLINK_field_SNP]
+#############FAILING!
+
 #what is n for bonferroni
 n_bfc <- unique(map_vec(gwas_blink_list, nrow))
+
+
 
 gwas_blink_list[[1]] |>
   arrange(Chromosome, Position) |>
@@ -78,7 +109,7 @@ mlm_fp <- map_chr(mlm_dirs, list.files, full.names = TRUE)
 
 gwas_mlm_list <- map(mlm_fp, read_tassel)
 names(gwas_mlm_list) <- str_c(
-  "MLM ",
+  "MLM_",
   c("density", "length", "cvars", "field", "gh", "width")
 )
 
