@@ -43,9 +43,12 @@ probit_meta <- function(gwas_list){
     qnorm(1 - 0.5 * p_value)^2
   }
   
+  nms <- names(gwas_list)
+  
   reduce(gwas_list,
-         \(x, idx) full_join(x, by = c("SNP", "Chromosome", "Position"),
-                             suffix = c(.x = str_c("_", idx), .y = ""))
+         \(x, y) full_join(x, y,
+                             by = c("SNP", "Chromosome", "Position"),
+                             suffix = c(.x = names(x), .y = names(y)))
          )
   # imap(gwas_list,
   #     \(x, idx) reduce(x, full_join,
