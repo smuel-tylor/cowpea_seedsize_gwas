@@ -116,7 +116,12 @@ mlm_dirs <- str_c("copy_of_MWK_dir/GWAS_Results/Seed ",
 
 mlm_fp <- map_chr(mlm_dirs, list.files, full.names = TRUE)
 
-gwas_mlm_list <- map(mlm_fp, read_tassel)
+gwas_mlm_list <- map(mlm_fp, \(x) read_tassel(x) |>
+                       select(c("SNP", "Chromosome", "Position",
+                                "P.value", "neg_log10p"
+                                )
+                              )
+)
 names(gwas_mlm_list) <- str_c(
   "MLM_",
   c("density", "length", "cvars", "field", "gh", "width")
@@ -165,6 +170,9 @@ a <- upset(fromList(mlm_bnk),
       sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 7)
 )
 
-#need to do psnps
+a
 
+#need to do psnps
+gwas_mlm_list
+#need to do something involving lags to establish distances...
   
