@@ -38,24 +38,36 @@ names(gwas_blink_list) <- str_c(
 #taking as input the list components relevant to the meta-analysis
 #this function carries out the probit transformation
 probit_meta <- function(gwas_list){
+  
   z_squared <- function(p_value){
     qnorm(1 - 0.5 * p_value)^2
   }
-  gwas_list |>
-  map(\(x) x |>
-        arrange(Chromosome, Position) |>
-        mutate(z_sq = z_squared(P.value))) |>
-    list_cbind() |>
-    #the next line is necessary to deal with packed dataframe structure
-    unpack(cols = everything(), names_sep = "_") |>
-    mutate(Chi_sq = rowSums(across(ends_with(".z_sq"))),
-           META_weight_P.value = pchisq(Chi_sq,
-                                        length(gwas_list),
-                                        lower.tail = FALSE
-                                        ),
-           META_neg_log10p = -log(META_weight_P.value, base = 10)
-             )
+  
+  reduce(gwas_list,
+         \(x, idx) full_join(x, by = c("SNP", "Chromosome", "Position"),
+                             suffix = c(.x = str_c("_", idx), .y = ""))
+         )
+  # imap(gwas_list,
+  #     \(x, idx) reduce(x, full_join,
+  #                 by = c("SNP", "Chromosome", "Position"),
+  #                 suffix = c(.x = str_c("_", idx), .y = "")
+  #                 )
+  #     )#|>
+        #arrange(Chromosome, Position) |>
+    #     mutate(z_sq = z_squared(P.value))) |>
+    # #list_cbind() |>
+    # #the next line is necessary to deal with packed dataframe structure
+    # #unpack(cols = everything(), names_sep = "_") |>
+    # mutate(Chi_sq = rowSums(across(contains("z_sq"))),
+    #        META_weight_P.value = pchisq(Chi_sq,
+    #                                     length(gwas_list),
+    #                                     lower.tail = FALSE
+    #                                     ),
+    #        META_neg_log10p = -log(META_weight_P.value, base = 10)
+    #          )
 }
+
+probit_meta(gwas_blink_list[3:5])
 
 META <- probit_meta(gwas_blink_list[3:5])
 #checks
