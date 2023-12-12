@@ -43,52 +43,46 @@ probit_meta <- function(gwas_list){
     qnorm(1 - 0.5 * p_value)^2
   }
   
-  nms <- names(gwas_list)
-  
-  reduce(gwas_list,
-         \(x, y) full_join(x, y,
-                             by = c("SNP", "Chromosome", "Position"),
-                             suffix = c(.x = names(x), .y = names(y)))
-         )
-  # imap(gwas_list,
-  #     \(x, idx) reduce(x, full_join,
-  #                 by = c("SNP", "Chromosome", "Position"),
-  #                 suffix = c(.x = str_c("_", idx), .y = "")
-  #                 )
-  #     )#|>
-        #arrange(Chromosome, Position) |>
-    #     mutate(z_sq = z_squared(P.value))) |>
-    # #list_cbind() |>
-    # #the next line is necessary to deal with packed dataframe structure
-    # #unpack(cols = everything(), names_sep = "_") |>
-    # mutate(Chi_sq = rowSums(across(contains("z_sq"))),
-    #        META_weight_P.value = pchisq(Chi_sq,
-    #                                     length(gwas_list),
-    #                                     lower.tail = FALSE
-    #                                     ),
-    #        META_neg_log10p = -log(META_weight_P.value, base = 10)
-    #          )
+  imap(gwas_list,
+       \(x, idx) rename_with(x,
+                             ~ str_c(idx, "_", .x),
+                             !contains(c("SNP", "Chromosome", "Position"))
+       )
+  ) |>
+    reduce(full_join) |>
+    select(contains(c("SNP", "Chromosome", "Position", "P.value", "log10p"))) |>
+    arrange(Chromosome, Position) |>
+    mutate(across(contains("P.value"), z_squared, .names = "{.col}_z_sq"),
+           meta_Chi_sq = rowSums(across(contains("z_sq"))),
+           meta_P.value = pchisq(meta_Chi_sq,
+                                        length(gwas_list),
+                                        lower.tail = FALSE
+           ),
+           meta_neg_log10p = -log(meta_P.value, base = 10)
+    )
 }
 
-probit_meta(gwas_blink_list[3:5])
-
-META <- probit_meta(gwas_blink_list[3:5])
-#checks
-all(META$BLINK_cvars_SNP == META$BLINK_field_SNP)
-all(META$BLINK_cvars_SNP == META$BLINK_gh_SNP)
-META$BLINK_cvars_SNP[META$BLINK_cvars_SNP != META$BLINK_field_SNP]
-#############FAILING!
+gwas_blink_list$BLINK_meta <- probit_meta(
+  gwas_blink_list[c("BLINK_cvars", "BLINK_field", "BLINK_gh")]
+  ) |>
+  select(c("SNP", "Chromosome", "Position", "meta_P.value", "meta_neg_log10p")
+         ) |>
+  rename(P.value = meta_P.value,
+         neg_log10p = meta_neg_log10p
+         )
 
 #what is n for bonferroni
 n_bfc <- unique(map_vec(gwas_blink_list, nrow))
 
-
-
-gwas_blink_list[[1]] |>
-  arrange(Chromosome, Position) |>
+gwas_blink_list |>
+map(\(x) arrange(x, Chromosome, Position) |>
   mutate(Position_G = cumsum(Position)) |>
 ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
-  geom_point()
+  geom_point() +
+  ylim(0, 25)
+)
+#There's an Inf in the mix from the meta-analysis...
+gwas_blink_list$BLINK_meta |> filter(neg_log10p > 15)
 
 gwas_blink_list_sig <- gwas_blink_list |>
   map(\(x) filter(x, neg_log10p > -log(0.05 / n_bfc, base = 10)))
@@ -128,14 +122,25 @@ names(gwas_mlm_list) <- str_c(
   c("density", "length", "cvars", "field", "gh", "width")
 )
 
+gwas_mlm_list$MLM_meta <- probit_meta(
+  gwas_mlm_list[c("MLM_cvars", "MLM_field", "MLM_gh")]
+) |>
+  select(c("SNP", "Chromosome", "Position", "meta_P.value", "meta_neg_log10p")
+  ) |>
+  rename(P.value = meta_P.value,
+         neg_log10p = meta_neg_log10p
+  )
+
 #what is n for bonferroni
 unique(map_vec(gwas_mlm_list, nrow)) == n_bfc
 
-gwas_mlm_list[[1]] |>
-  arrange(Chromosome, Position) |>
-  mutate(Position_G = cumsum(Position)) |>
-  ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
-  geom_point()
+gwas_mlm_list |>
+  map(\(x) arrange(x, Chromosome, Position) |>
+        mutate(Position_G = cumsum(Position)) |>
+        ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
+        geom_point() +
+        ylim(0, 25)
+  )
 
 gwas_mlm_list_sig <- gwas_mlm_list |>
   map(\(x) filter(x, neg_log10p > -log(0.05 / n_bfc, base = 10)))
@@ -145,20 +150,19 @@ map_vec(gwas_mlm_list_sig, nrow)
 gwas_mlm_list_snps <- map(gwas_mlm_list_sig, \(x) x[ , "SNP"])
 upset(fromList(gwas_mlm_list_snps))
 
-mlm_blk <- c(gwas_mlm_list_snps, gwas_blink_list_snps)
-a <- upset(fromList(mlm_blk),
-      nsets = length(mlm_blk),
-      sets = names(mlm_blk)[length(mlm_blk):1],
-      # sets = c("BLINK density", "MLM density",
-      #          "BLINK length", "MLM length",
-      #          "BLINK width", "MLM width",
-      #          "BLINK cvars", "MLM cvars",
-      #          "BLINK field", "MLM field",
-      #          "BLINK gh", "MLM gh"
-      # ),
+mlm_bnk <- c(gwas_mlm_list_snps, gwas_blink_list_snps)
+names(mlm_bnk) <- str_replace_all(names(mlm_bnk), "_", " ")
+a <- upset(fromList(mlm_bnk),
+      nsets = length(mlm_bnk),
+      #sets = names(mlm_bnk)[length(mlm_bnk):1],
+      sets = c("BLINK density", "BLINK length", "BLINK width",
+               "BLINK cvars", "BLINK field", "BLINK gh", "BLINK meta",
+               "MLM density", "MLM length", "MLM width",
+               "MLM cvars", "MLM field", "MLM gh", "MLM meta"
+               ),
       keep.order = TRUE,
       order.by = c("freq"),
-      sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 6)
+      sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 7)
 )
 
 #need to do psnps
