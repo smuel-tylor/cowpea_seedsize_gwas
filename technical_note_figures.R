@@ -139,20 +139,72 @@ gwas_mlm_list$MLM_meta <- probit_meta(
 #what is n for bonferroni
 unique(map_vec(gwas_mlm_list, nrow)) == n_bfc
 
-gwas_mlm_list |>
+gwas_mlm_list_mta <- gwas_mlm_list |>
   map(\(x) arrange(x, Chromosome, Position) |>
-        mutate(Position_G = cumsum(Position)) |>
-        ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
-        geom_point() +
-        ylim(0, 25)
+        mutate(Position_G = cumsum(Position),
+               mta = ifelse(neg_log10p > -log(0.05 / n_bfc, base = 10),
+                            "sig", "ns"),
+               )
   )
 
-gwas_mlm_list_sig <- gwas_mlm_list |>
-  map(\(x) filter(x, neg_log10p > -log(0.05 / n_bfc, base = 10)))
+gwas_mlm_list_mta |>
+        map(\(x) ggplot(x, aes(Position_G, neg_log10p, colour = Chromosome)) + 
+        geom_point() +
+        ylim(0, 25)
+        )
+
+gwas_mlm_list_sig <- gwas_mlm_list_mta |>
+  map(\(x) filter(x, mta == "sig"))
 #should mean we now have different length sets in each element of the list
 map_vec(gwas_mlm_list_sig, nrow)
 
-gwas_mlm_list_snps <- map(gwas_mlm_list_sig, \(x) x[ , "SNP"])
+#function that scans along sig column to id changes
+####wip - struggling with it a bit
+last_threshold <- \(x){
+  x[ , "last_threshold"] <- rep(NA, nrow(x))
+  for (i in 1:nrow(x)){
+    x[i, "last_threshold"] <- ifelse(i == 1,
+                                     x[i, "SNP"],
+                                     ifelse(
+                                       x[i - 1, "mta"] == x[i, "mta"],
+                                       x[i - 1, "last_threshold"],
+                                       x[i, "SNP"]
+                                     )
+    )
+  }
+  x
+}
+
+#couldn't work out how to do this using modify... kept throwing errors
+  # #last <-
+  #   modify2(rep(NA, nrow(x)), 1:length(last),
+  #         \(y, i) y[i] <- ifelse(i == 1,
+  #                                x[i, "SNP"],
+  #                                ifelse(
+  #                                    x[i - 1, "mta"] == x[i, "mta"],
+  #                                    y[i - 1],
+  #                                    x[i, "SNP"]
+  #                                  )
+  # )
+  # )
+  #data.frame(x, last_threshold = last)
+
+#below continues to be an issue
+gwas_mlm_list_psnp <- gwas_mlm_list_mta |>
+  map(last_threshold) |>
+  map(\(x) split(x, ~ last_threshold) |>
+        map(\(y) mutate(y, psnp = ifelse(max(neg_log10p), "psnp", "snp"))
+            ) |>
+        unsplit(~ last_threshold)
+  ) |>
+  map(\(x) filter(x, mta == "sig"))
+
+
+        filter(max_neg_log10p == "psnp")
+#should mean we now have different length sets in each element of the list
+map_vec(gwas_mlm_list_mta, nrow)
+
+gwas_mlm_list_snps <- map(gwas_mlm_list_mta, \(x) x[ , "SNP"])
 upset(fromList(gwas_mlm_list_snps))
 
 mlm_bnk <- c(gwas_mlm_list_snps, gwas_blink_list_snps)
@@ -173,6 +225,6 @@ a <- upset(fromList(mlm_bnk),
 a
 
 #need to do psnps
-gwas_mlm_list
+gwas_mlm_list_sig
 #need to do something involving lags to establish distances...
   
