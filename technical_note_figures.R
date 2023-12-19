@@ -1,7 +1,7 @@
 library(UpSetR)
 library(tidyverse)
 
-read_blink <- function(fp){
+read_blink <- \(fp){
   read.csv(fp) |>
     select(SNP:P.value) |>
     mutate(neg_log10p = -log(P.value, base = 10),
@@ -37,9 +37,9 @@ names(gwas_blink_list) <- str_c(
 
 #taking as input the list components relevant to the meta-analysis
 #this function carries out the probit transformation
-probit_meta <- function(gwas_list){
+probit_meta <- \(gwas_list){
   
-  z_squared <- function(p_value){
+  z_squared <- \(p_value){
     qnorm(1 - 0.5 * p_value)^2
   }
   
@@ -84,14 +84,81 @@ ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) +
 #There's an Inf in the mix from the meta-analysis...
 gwas_blink_list$BLINK_meta |> filter(neg_log10p > 15)
 
-gwas_blink_list_sig <- gwas_blink_list |>
-  map(\(x) filter(x, neg_log10p > -log(0.05 / n_bfc, base = 10)))
+gwas_blink_list_mta <- gwas_blink_list |>
+  map(\(x) arrange(x, Chromosome, Position) |>
+        mutate(Position_G = cumsum(Position),
+               #this is slightly larger than 5.92
+               mta = ifelse(neg_log10p > -log(0.05 / n_bfc, base = 10),
+                            "sig", "ns"),
+        )
+  )
+
+gwas_blink_list_mta |>
+  map(\(x) x|>
+        ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
+        geom_point() +
+        ylim(0, 25)
+  )
+
+gwas_blink_list_sig <- gwas_blink_list_mta |>
+  map(\(x) filter(x, mta == "sig"))
 #should mean we now have different length sets in each element of the list
 map_vec(gwas_blink_list_sig, nrow)
 
-gwas_blink_list_snps <- map(gwas_blink_list_sig, \(x) x[ , "SNP"])
-upset(fromList(gwas_blink_list_snps))
+#function that scans along sig column to id changes
+last_threshold <- \(x){
+  x[ , "last_threshold"] <- rep(NA, nrow(x))
+  for (i in 1:nrow(x)){
+    x[i, "last_threshold"] <- ifelse(i == 1,
+                                     x[i, "SNP"],
+                                     ifelse(
+                                       x[i - 1, "mta"] == x[i, "mta"],
+                                       x[i - 1, "last_threshold"],
+                                       x[i, "SNP"]
+                                     )
+    )
+  }
+  x
+}
 
+#couldn't work out how to do this using modify... kept throwing errors
+# #last <-
+#   modify2(rep(NA, nrow(x)), 1:length(last),
+#         \(y, i) y[i] <- ifelse(i == 1,
+#                                x[i, "SNP"],
+#                                ifelse(
+#                                    x[i - 1, "mta"] == x[i, "mta"],
+#                                    y[i - 1],
+#                                    x[i, "SNP"]
+#                                  )
+# )
+# )
+#data.frame(x, last_threshold = last)
+
+gwas_blink_list_psnp <- gwas_blink_list_mta |>
+  map(last_threshold) |>
+  map(\(x) x |>
+        filter(mta == "sig") |>
+        group_by(last_threshold) |>
+        mutate(max_neg_log10p = max(neg_log10p),
+               psnp = ifelse(max_neg_log10p == neg_log10p,
+                             "psnp",
+                             "snp"
+               )
+        ) |>
+        ungroup() |>
+        filter(psnp == "psnp") |>
+        #this last transformation is needed to ensure upset works
+        as.data.frame()
+  )
+
+gwas_blink_list_sig_snps <- map(gwas_blink_list_sig, \(x) x[ , "SNP"])
+upset(fromList(gwas_blink_list_sig_snps))
+
+gwas_blink_list_psnp_snps <- map(gwas_blink_list_psnp, \(x) x[ , "SNP"])
+upset(fromList(gwas_blink_list_psnp_snps))
+
+#MLM
 read_tassel <- function(fp){
   read.delim(fp) |>
     filter(!is.na(Pos)) |> #removes a null row
@@ -142,76 +209,69 @@ unique(map_vec(gwas_mlm_list, nrow)) == n_bfc
 gwas_mlm_list_mta <- gwas_mlm_list |>
   map(\(x) arrange(x, Chromosome, Position) |>
         mutate(Position_G = cumsum(Position),
+               #this is slightly larger than 5.92
                mta = ifelse(neg_log10p > -log(0.05 / n_bfc, base = 10),
                             "sig", "ns"),
                )
   )
 
 gwas_mlm_list_mta |>
-        map(\(x) ggplot(x, aes(Position_G, neg_log10p, colour = Chromosome)) + 
+        map(\(x) x|>
+            ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
         geom_point() +
         ylim(0, 25)
         )
+
+#This confirms that old psnp analysis was inappropriate
+#11 p-snps should be present in just this segment of chr3
+#The previous analysis showed only 13 across the entire genome
+gwas_mlm_list_mta$MLM_meta |>
+  filter(Chromosome == "VU03") |>
+  ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
+  geom_line() +
+  ylim(0, 25) +
+  xlim(1.4775e11, 1.483e11)
 
 gwas_mlm_list_sig <- gwas_mlm_list_mta |>
   map(\(x) filter(x, mta == "sig"))
 #should mean we now have different length sets in each element of the list
 map_vec(gwas_mlm_list_sig, nrow)
 
-#function that scans along sig column to id changes
-####wip - struggling with it a bit
-last_threshold <- \(x){
-  x[ , "last_threshold"] <- rep(NA, nrow(x))
-  for (i in 1:nrow(x)){
-    x[i, "last_threshold"] <- ifelse(i == 1,
-                                     x[i, "SNP"],
-                                     ifelse(
-                                       x[i - 1, "mta"] == x[i, "mta"],
-                                       x[i - 1, "last_threshold"],
-                                       x[i, "SNP"]
-                                     )
-    )
-  }
-  x
-}
-
-#couldn't work out how to do this using modify... kept throwing errors
-  # #last <-
-  #   modify2(rep(NA, nrow(x)), 1:length(last),
-  #         \(y, i) y[i] <- ifelse(i == 1,
-  #                                x[i, "SNP"],
-  #                                ifelse(
-  #                                    x[i - 1, "mta"] == x[i, "mta"],
-  #                                    y[i - 1],
-  #                                    x[i, "SNP"]
-  #                                  )
-  # )
-  # )
-  #data.frame(x, last_threshold = last)
-
-#below continues to be an issue
-gwas_mlm_list_psnp <- gwas_mlm_list_mta |>
+#this segment won't handle the missing parts of the list
+gwas_mlm_list_psnp <- gwas_mlm_list_mta[map_vec(gwas_mlm_list_sig, nrow) != 0] |>
   map(last_threshold) |>
-  map(\(x) split(x, ~ last_threshold) |>
-        map(\(y) mutate(y, psnp = ifelse(max(neg_log10p), "psnp", "snp"))
-            ) |>
-        unsplit(~ last_threshold)
-  ) |>
-  map(\(x) filter(x, mta == "sig"))
+  map(\(x) x |>
+        filter(mta == "sig") |>
+        group_by(last_threshold) |>
+        mutate(max_neg_log10p = max(neg_log10p, na.rm = TRUE),
+               psnp = ifelse(max_neg_log10p == neg_log10p,
+                             "psnp",
+                             "snp"
+               )
+        ) |>
+        ungroup() |>
+        filter(psnp == "psnp") |>
+        as.data.frame()
+  )
 
-
-        filter(max_neg_log10p == "psnp")
 #should mean we now have different length sets in each element of the list
-map_vec(gwas_mlm_list_mta, nrow)
+map_vec(gwas_mlm_list_psnp, nrow)
 
-gwas_mlm_list_snps <- map(gwas_mlm_list_mta, \(x) x[ , "SNP"])
-upset(fromList(gwas_mlm_list_snps))
+gwas_mlm_list_sig_snps <- map(gwas_mlm_list_sig, \(x) x[ , "SNP"])
+upset(fromList(gwas_mlm_list_sig_snps))
 
-mlm_bnk <- c(gwas_mlm_list_snps, gwas_blink_list_snps)
-names(mlm_bnk) <- str_replace_all(names(mlm_bnk), "_", " ")
-a <- upset(fromList(mlm_bnk),
-      nsets = length(mlm_bnk),
-      #sets = names(mlm_bnk)[length(mlm_bnk):1],
+gwas_mlm_list_psnp_snps <- map(gwas_mlm_list_psnp, \(x) x[ , "SNP"])
+#padding this
+gwas_mlm_list_psnp_snps$MLM_field <- character(0)
+gwas_mlm_list_psnp_snps$MLM_width <- character(0)
+gwas_mlm_list_psnp_snps$MLM_length <- character(0)
+upset(fromList(gwas_mlm_list_psnp_snps))
+
+mlm_bnk_sig <- c(gwas_mlm_list_sig_snps, gwas_blink_list_sig_snps)
+names(mlm_bnk_sig) <- str_replace_all(names(mlm_bnk_sig), "_", " ")
+a <- upset(fromList(mlm_bnk_sig),
+      nsets = length(mlm_bnk_sig),
+      #sets = names(mlm_bnk_sig)[length(mlm_bnk_sig):1],
       sets = c("BLINK density", "BLINK length", "BLINK width",
                "BLINK cvars", "BLINK field", "BLINK gh", "BLINK meta",
                "MLM density", "MLM length", "MLM width",
@@ -225,6 +285,21 @@ a <- upset(fromList(mlm_bnk),
 a
 
 #need to do psnps
-gwas_mlm_list_sig
-#need to do something involving lags to establish distances...
+mlm_bnk_psnp <- c(gwas_mlm_list_psnp_snps, gwas_blink_list_psnp_snps)
+names(mlm_bnk_psnp) <- str_replace_all(names(mlm_bnk_psnp), "_", " ")
+b <- upset(fromList(mlm_bnk_psnp),
+           nsets = length(mlm_bnk_psnp),
+           #sets = names(mlm_bnk_psnp)[length(mlm_bnk_psnp):1],
+           sets = c("BLINK density", "BLINK length", "BLINK width",
+                    "BLINK cvars", "BLINK field", "BLINK gh", "BLINK meta",
+                    "MLM density", "MLM length", "MLM width",
+                    "MLM cvars", "MLM field",
+                    "MLM gh", "MLM meta"
+           ),
+           keep.order = TRUE,
+           order.by = c("freq"),
+           sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 7)
+)
+
+b
   
