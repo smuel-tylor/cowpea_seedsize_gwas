@@ -1,5 +1,6 @@
 library(UpSetR)
 library(tidyverse)
+library(patchwork)
 
 read_blink <- \(fp){
   read.csv(fp) |>
@@ -286,6 +287,18 @@ a
 
 #need to do psnps
 mlm_bnk_psnp <- c(gwas_mlm_list_psnp_snps, gwas_blink_list_psnp_snps)
+
+mlm_bnk_psnp_table <- list_rbind(
+  list(
+    list_rbind(gwas_blink_list_psnp, names_to = "analysis"),
+    list_rbind(gwas_mlm_list_psnp, names_to = "analysis")
+  )
+)
+write.csv(mlm_bnk_psnp_table, "mlm_blink_psnp.csv")
+
+distinct(mlm_bnk_psnp_table, SNP, Chromosome, Position) |>
+  arrange(Chromosome, Position)
+
 names(mlm_bnk_psnp) <- str_replace_all(names(mlm_bnk_psnp), "_", " ")
 b <- upset(fromList(mlm_bnk_psnp),
            nsets = length(mlm_bnk_psnp),
@@ -302,4 +315,29 @@ b <- upset(fromList(mlm_bnk_psnp),
 )
 
 b
+
+pdf("blink_mlm_upset.pdf", paper = "a4")
+par(mfrow = c(2,1))
+a
+b
+dev.off()
+
+(
+(plot_spacer() + wrap_elements(a$Main_bar) + plot_layout(widths = c(1, 1.1))) /
+    (
+      wrap_elements(a$Sizes) +
+       (wrap_elements(a$Matrix) / plot_spacer() + plot_layout(heights = c(6, 1))) +
+       plot_layout(widths = c(2, 3))
+     )
+) /
+  (
+    (plot_spacer() + wrap_elements(b$Main_bar) + plot_layout(widths = c(1, 1.1))) /
+  (
+    wrap_elements(b$Sizes) +
+     (wrap_elements(b$Matrix) / plot_spacer() + plot_layout(heights = c(5, 1))) +
+    plot_layout(widths = c(1, 1.55))
+  )
+  ) +
+  plot_layout(heights = c(1, 1, 2))
+
   
