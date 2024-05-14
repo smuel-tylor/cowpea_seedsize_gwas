@@ -323,18 +323,18 @@ b
 dev.off()
 
 (
-(plot_spacer() + wrap_elements(a$Main_bar) + plot_layout(widths = c(1, 1.1))) /
+(plot_spacer() + wrap_elements(a$Main_bar) + plot_layout(widths = c(1, 1.13))) /
     (
       wrap_elements(a$Sizes) +
-       (wrap_elements(a$Matrix) / plot_spacer() + plot_layout(heights = c(6, 1))) +
+       (wrap_elements(a$Matrix) / plot_spacer() + plot_layout(heights = c(10, 1))) +
        plot_layout(widths = c(2, 3))
      )
 ) /
   (
-    (plot_spacer() + wrap_elements(b$Main_bar) + plot_layout(widths = c(1, 1.1))) /
+    (plot_spacer() + wrap_elements(b$Main_bar) + plot_layout(widths = c(1, 1.13))) /
   (
     wrap_elements(b$Sizes) +
-     (wrap_elements(b$Matrix) / plot_spacer() + plot_layout(heights = c(5, 1))) +
+     (wrap_elements(b$Matrix) / plot_spacer() + plot_layout(heights = c(10, 1))) +
     plot_layout(widths = c(1, 1.55))
   )
   ) +
