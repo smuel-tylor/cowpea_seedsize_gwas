@@ -279,20 +279,20 @@ upset(fromList(gwas_mlm_list_psnp_snps),
 mlm_bnk_sig <- c(gwas_mlm_list_sig_snps, gwas_blink_list_sig_snps)
 names(mlm_bnk_sig) <- str_replace_all(names(mlm_bnk_sig), "_", " ")
 a <- upset(fromList(mlm_bnk_sig),
-           list(names(fromList(mlm_bnk__sig))),
-#need to re-write the below consistent with ComplexUpset
-      nsets = length(mlm_bnk_sig),
+           intersect = c("BLINK density", "BLINK length", "BLINK width",
+                         "BLINK cvars", "BLINK field", "BLINK gh", "BLINK meta",
+                         "MLM density", "MLM length", "MLM width",
+                         "MLM cvars", "MLM field", "MLM gh", "MLM meta"
+           ),
+           sort_sets = FALSE
+           #need to re-write the below consistent with ComplexUpset
+      #nsets = length(mlm_bnk_sig),
       #sets = names(mlm_bnk_sig)[length(mlm_bnk_sig):1],
-      sets = c("BLINK density", "BLINK length", "BLINK width",
-               "BLINK cvars", "BLINK field", "BLINK gh", "BLINK meta",
-               "MLM density", "MLM length", "MLM width",
-               "MLM cvars", "MLM field", "MLM gh", "MLM meta"
-               ),
-      keep.order = TRUE,
-      mainbar.y.max = 135,
-      order.by = c("freq"),
-      sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 7),
-      set_size.scale_max = 170
+      #keep.order = TRUE,
+      #mainbar.y.max = 135,
+      #order.by = c("freq"),
+      #sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 7),
+      #set_size.scale_max = 170
 )
 
 a
