@@ -1,4 +1,4 @@
-library(UpSetR)
+library(ComplexUpset)
 library(tidyverse)
 library(patchwork)
 
@@ -154,10 +154,14 @@ gwas_blink_list_psnp <- gwas_blink_list_mta |>
   )
 
 gwas_blink_list_sig_snps <- map(gwas_blink_list_sig, \(x) x[ , "SNP"])
-upset(fromList(gwas_blink_list_sig_snps))
+upset(fromList(gwas_blink_list_sig_snps),
+      list(names(fromList(gwas_blink_list_sig_snps)))
+      )
 
 gwas_blink_list_psnp_snps <- map(gwas_blink_list_psnp, \(x) x[ , "SNP"])
-upset(fromList(gwas_blink_list_psnp_snps))
+upset(fromList(gwas_blink_list_psnp_snps),
+      list(names(fromList(gwas_blink_list_psnp_snps)))
+)
 
 #MLM
 read_tassel <- function(fp){
@@ -259,18 +263,24 @@ gwas_mlm_list_psnp <- gwas_mlm_list_mta[map_vec(gwas_mlm_list_sig, nrow) != 0] |
 map_vec(gwas_mlm_list_psnp, nrow)
 
 gwas_mlm_list_sig_snps <- map(gwas_mlm_list_sig, \(x) x[ , "SNP"])
-upset(fromList(gwas_mlm_list_sig_snps))
+upset(fromList(gwas_mlm_list_sig_snps),
+      list(names(fromList(gwas_mlm_list_sig_snps)))
+)
 
 gwas_mlm_list_psnp_snps <- map(gwas_mlm_list_psnp, \(x) x[ , "SNP"])
 #padding this
 gwas_mlm_list_psnp_snps$MLM_field <- character(0)
 gwas_mlm_list_psnp_snps$MLM_width <- character(0)
 gwas_mlm_list_psnp_snps$MLM_length <- character(0)
-upset(fromList(gwas_mlm_list_psnp_snps))
+upset(fromList(gwas_mlm_list_psnp_snps),
+      list(names(fromList(gwas_mlm_list_psnp_snps)))
+)
 
 mlm_bnk_sig <- c(gwas_mlm_list_sig_snps, gwas_blink_list_sig_snps)
 names(mlm_bnk_sig) <- str_replace_all(names(mlm_bnk_sig), "_", " ")
 a <- upset(fromList(mlm_bnk_sig),
+           list(names(fromList(mlm_bnk__sig))),
+#need to re-write the below consistent with ComplexUpset
       nsets = length(mlm_bnk_sig),
       #sets = names(mlm_bnk_sig)[length(mlm_bnk_sig):1],
       sets = c("BLINK density", "BLINK length", "BLINK width",
@@ -279,8 +289,10 @@ a <- upset(fromList(mlm_bnk_sig),
                "MLM cvars", "MLM field", "MLM gh", "MLM meta"
                ),
       keep.order = TRUE,
+      mainbar.y.max = 135,
       order.by = c("freq"),
-      sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 7)
+      sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 7),
+      set_size.scale_max = 170
 )
 
 a
@@ -300,44 +312,44 @@ distinct(mlm_bnk_psnp_table, SNP, Chromosome, Position) |>
   arrange(Chromosome, Position)
 
 names(mlm_bnk_psnp) <- str_replace_all(names(mlm_bnk_psnp), "_", " ")
-b <- upset(fromList(mlm_bnk_psnp),
+b <- upset(upsetr::fromList(mlm_bnk_psnp),
            nsets = length(mlm_bnk_psnp),
            #sets = names(mlm_bnk_psnp)[length(mlm_bnk_psnp):1],
-           sets = c("BLINK density", "BLINK length", "BLINK width",
-                    "BLINK cvars", "BLINK field", "BLINK gh", "BLINK meta",
-                    "MLM density", "MLM length", "MLM width",
+           sets = c("MLM density", "MLM length", "MLM width",
                     "MLM cvars", "MLM field",
-                    "MLM gh", "MLM meta"
+                    "MLM gh", "MLM meta",
+                    "BLINK density", "BLINK length", "BLINK width",
+                    "BLINK cvars", "BLINK field", "BLINK gh", "BLINK meta"
            ),
            keep.order = TRUE,
-           order.by = c("freq"),
-           sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 7)
+           mainbar.y.max = 135,
+           order.by = c("freq"), decreasing = FALSE,
+           sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 7),
+           set_size.show = TRUE,
+           set_size.scale_max = 165,
+           set_sizes = (upset_set_size() + xlim(-20, 165))
 )
 
 b
 
 pdf("blink_mlm_upset.pdf", paper = "a4")
-par(mfrow = c(2,1))
-a
-b
-dev.off()
 
 (
-(plot_spacer() + wrap_elements(a$Main_bar) + plot_layout(widths = c(1, 1.13))) /
+(plot_spacer() + wrap_elements(a$Main_bar) + plot_layout(widths = c(1, 3))) /
     (
       wrap_elements(a$Sizes) +
        (wrap_elements(a$Matrix) / plot_spacer() + plot_layout(heights = c(10, 1))) +
-       plot_layout(widths = c(2, 3))
+       plot_layout(widths = c(1, 3))
      )
 ) /
   (
-    (plot_spacer() + wrap_elements(b$Main_bar) + plot_layout(widths = c(1, 1.13))) /
+    (plot_spacer() + wrap_elements(b$Main_bar) + plot_layout(widths = c(1, 3))) /
   (
     wrap_elements(b$Sizes) +
      (wrap_elements(b$Matrix) / plot_spacer() + plot_layout(heights = c(10, 1))) +
-    plot_layout(widths = c(1, 1.55))
+    plot_layout(widths = c(6, 3))
   )
   ) +
   plot_layout(heights = c(1, 1, 2))
 
-  
+dev.off()  
