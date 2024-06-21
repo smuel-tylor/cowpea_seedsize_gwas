@@ -245,6 +245,14 @@ gwas_mlm_list_mta$MLM_meta |>
   ylim(0, 25) +
   xlim(1.4775e11, 1.483e11)
 
+# but checking with 
+mlm_bnk_psnp |> rename(Position_G = 3) |>
+  arrange(Position_G) |>
+  mutate(diff = lead(Position_G) - Position_G) |>
+  select(diff)
+#Suggests I have mad a mistake in re-analysing this,
+# because I didn't take account of the 270 kb linkage group
+
 gwas_mlm_list_sig <- gwas_mlm_list_mta |>
   map(\(x) filter(x, mta == "sig"))
 #should mean we now have different length sets in each element of the list
@@ -333,7 +341,15 @@ a <- upset(mlm_bnk_sig,
                          "MLM density", "MLM length", "MLM width",
                          "MLM cvars", "MLM field", "MLM gh", "MLM meta"
            ),
-           sort_sets = FALSE
+           sort_sets = FALSE,
+           #sort_intersections_by = "degree",
+           base_annotations = list(
+             'Intersection size'= (
+               intersection_size()
+               + ylim(c(0, 135))
+             )
+           ),
+           set_sizes = upset_set_size() + ylim(170, 0)
            #need to re-write the below consistent with ComplexUpset
       #nsets = length(mlm_bnk_sig),
       #sets = names(mlm_bnk_sig)[length(mlm_bnk_sig):1],
@@ -370,7 +386,7 @@ mlm_bnk_psnp <- full_join(
 # )
 # write.csv(mlm_bnk_psnp_table, "mlm_blink_psnp.csv")
 
-distinct(mlm_bnk_psnp, SNP, Chromosome, Position, Position_G) |>
+distinct(mlm_bnk_psnp, SNP:Position) |>
   arrange(Chromosome, Position)
 
 names(mlm_bnk_psnp) <- str_replace_all(names(mlm_bnk_psnp), "_", " ")
@@ -381,13 +397,22 @@ b <- upset(mlm_bnk_psnp,
                          "MLM density", "MLM length", "MLM width",
                          "MLM cvars", "MLM field", "MLM gh", "MLM meta"
            ),
-           sort_sets = FALSE
+           sort_sets = FALSE,
+           #sort_intersections_by = "degree",
+           base_annotations = list(
+             'Intersection size'= (
+               intersection_size()
+               + ylim(c(0, 135))
+             )
+           ),
+           set_sizes = upset_set_size() + ylim(170, 0)
 )
 
 b
 
-pdf("blink_mlm_upset.pdf", paper = "a4")
+pdf("mlm_blink_upset.pdf", w = 320/25.8, h = 320/25.8)
 
 a / b
 
 dev.off()  
+
