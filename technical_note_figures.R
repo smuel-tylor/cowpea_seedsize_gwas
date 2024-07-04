@@ -123,20 +123,6 @@ last_threshold <- \(x){
   x
 }
 
-#couldn't work out how to do this using modify... kept throwing errors
-# #last <-
-#   modify2(rep(NA, nrow(x)), 1:length(last),
-#         \(y, i) y[i] <- ifelse(i == 1,
-#                                x[i, "SNP"],
-#                                ifelse(
-#                                    x[i - 1, "mta"] == x[i, "mta"],
-#                                    y[i - 1],
-#                                    x[i, "SNP"]
-#                                  )
-# )
-# )
-#data.frame(x, last_threshold = last)
-
 gwas_blink_list_psnp <- gwas_blink_list_mta |>
   map(last_threshold) |>
   map(\(x) x |>
@@ -154,17 +140,44 @@ gwas_blink_list_psnp <- gwas_blink_list_mta |>
         as.data.frame()
   )
 
+<<<<<<< HEAD
 gwas_blink_list_sig_snps <- map(gwas_blink_list_sig, \(x) x[ , "SNP"])
 
 ur <- UpSetR::fromList(gwas_blink_list_sig_snps)
 upset(ur,
       intersect = names(ur)
+=======
+#reformat and use complexupset
+gwas_blink_sig_snps <- gwas_blink_list_sig |>
+  list_rbind(names_to = "method_phenotype") |>
+  select(-c(P.value:Trait)) |>
+  pivot_wider(names_from = method_phenotype, values_from = mta) |>
+  mutate(across(starts_with("BLINK"),
+                ~ ifelse(.x == "sig", 1, 0) |> replace_na(0)
+                )
+         )
+
+upset(gwas_blink_sig_snps,
+      intersect = c("BLINK_density", "BLINK_length", "BLINK_width",
+                    "BLINK_cvars", "BLINK_field", "BLINK_gh", "BLINK_meta"
+      )
+>>>>>>> 880c15b53e881cc668f46d226c714ab8c549e91f
       )
 #not working - is it an R update issue?
 
-gwas_blink_list_psnp_snps <- map(gwas_blink_list_psnp, \(x) x[ , "SNP"])
-upset(fromList(gwas_blink_list_psnp_snps),
-      list(names(fromList(gwas_blink_list_psnp_snps)))
+gwas_blink_psnp_snps <- gwas_blink_list_psnp |>
+  list_rbind(names_to = "method_phenotype") |>
+  select(-c(P.value:Trait, mta:max_neg_log10p)) |>
+  pivot_wider(names_from = method_phenotype, values_from = psnp) |>
+  mutate(across(starts_with("BLINK"),
+                ~ ifelse(.x == "psnp", 1, 0) |> replace_na(0)
+  )
+  )
+
+upset(gwas_blink_psnp_snps,
+      intersect = c("BLINK_density", "BLINK_length", "BLINK_width",
+                    "BLINK_cvars", "BLINK_field", "BLINK_gh", "BLINK_meta"
+      )
 )
 
 #MLM
@@ -198,6 +211,7 @@ gwas_mlm_list <- map(mlm_fp, \(x) read_tassel(x) |>
                                 )
                               )
 )
+
 names(gwas_mlm_list) <- str_c(
   "MLM_",
   c("density", "length", "cvars", "field", "gh", "width")
@@ -241,6 +255,14 @@ gwas_mlm_list_mta$MLM_meta |>
   ylim(0, 25) +
   xlim(1.4775e11, 1.483e11)
 
+# but checking with 
+mlm_bnk_psnp |> rename(Position_G = 3) |>
+  arrange(Position_G) |>
+  mutate(diff = lead(Position_G) - Position_G) |>
+  select(diff)
+#Suggests I have mad a mistake in re-analysing this,
+# because I didn't take account of the 270 kb linkage group
+
 gwas_mlm_list_sig <- gwas_mlm_list_mta |>
   map(\(x) filter(x, mta == "sig"))
 #should mean we now have different length sets in each element of the list
@@ -266,29 +288,78 @@ gwas_mlm_list_psnp <- gwas_mlm_list_mta[map_vec(gwas_mlm_list_sig, nrow) != 0] |
 #should mean we now have different length sets in each element of the list
 map_vec(gwas_mlm_list_psnp, nrow)
 
-gwas_mlm_list_sig_snps <- map(gwas_mlm_list_sig, \(x) x[ , "SNP"])
-upset(fromList(gwas_mlm_list_sig_snps),
-      list(names(fromList(gwas_mlm_list_sig_snps)))
+#reformat and use complexupset
+gwas_mlm_sig_snps <- gwas_mlm_list_sig |>
+  list_rbind(names_to = "method_phenotype") |>
+  select(-c(P.value:neg_log10p)) |>
+  pivot_wider(names_from = method_phenotype, values_from = mta) |>
+  mutate(across(starts_with("MLM"),
+                ~ ifelse(.x == "sig", 1, 0) |> replace_na(0)
+  )
+  )
+
+head(gwas_mlm_sig_snps)
+#need to manually reconstruct empty classes
+gwas_mlm_sig_snps[ , c("MLM_length", "MLM_width", "MLM_field")] <- 0
+
+upset(gwas_mlm_sig_snps,
+      intersect = c("MLM_density", "MLM_length", "MLM_width",
+                    "MLM_cvars", "MLM_field", "MLM_gh", "MLM_meta"
+      )
 )
 
-gwas_mlm_list_psnp_snps <- map(gwas_mlm_list_psnp, \(x) x[ , "SNP"])
-#padding this
-gwas_mlm_list_psnp_snps$MLM_field <- character(0)
-gwas_mlm_list_psnp_snps$MLM_width <- character(0)
-gwas_mlm_list_psnp_snps$MLM_length <- character(0)
-upset(fromList(gwas_mlm_list_psnp_snps),
-      list(names(fromList(gwas_mlm_list_psnp_snps)))
+gwas_mlm_psnp_snps <- gwas_mlm_list_psnp |>
+  list_rbind(names_to = "method_phenotype") |>
+  select(-c(P.value:neg_log10p, mta:max_neg_log10p)) |>
+  pivot_wider(names_from = method_phenotype, values_from = psnp) |>
+  mutate(across(starts_with("MLM"),
+                ~ ifelse(.x == "psnp", 1, 0) |> replace_na(0)
+  )
+  )
+
+head(gwas_mlm_psnp_snps)
+#need to manually reconstruct empty classes
+gwas_mlm_psnp_snps[ , c("MLM_length", "MLM_width", "MLM_field")] <- 0
+
+upset(gwas_mlm_psnp_snps,
+      intersect = c("MLM_density", "MLM_length", "MLM_width",
+                    "MLM_cvars", "MLM_field", "MLM_gh", "MLM_meta"
+      )
 )
 
-mlm_bnk_sig <- c(gwas_mlm_list_sig_snps, gwas_blink_list_sig_snps)
+mlm_bnk_sig <- full_join(
+  gwas_mlm_sig_snps |>
+    pivot_longer(starts_with("MLM"),
+                 names_to = "method_phenotype",
+                 values_to = "yes_no"
+                 ),
+  gwas_blink_sig_snps |>
+    pivot_longer(starts_with("BLINK"),
+                 names_to = "method_phenotype",
+                 values_to = "yes_no"
+    )
+  ) |>
+  pivot_wider(names_from = method_phenotype, values_from = yes_no) |>
+  mutate(across(matches("^MLM|^BLINK"), ~ replace_na(.x, 0)))  
+
+#To enable pretty plotting, remove underscores in names
 names(mlm_bnk_sig) <- str_replace_all(names(mlm_bnk_sig), "_", " ")
-a <- upset(fromList(mlm_bnk_sig),
+
+a <- upset(mlm_bnk_sig,
            intersect = c("BLINK density", "BLINK length", "BLINK width",
                          "BLINK cvars", "BLINK field", "BLINK gh", "BLINK meta",
                          "MLM density", "MLM length", "MLM width",
                          "MLM cvars", "MLM field", "MLM gh", "MLM meta"
            ),
-           sort_sets = FALSE
+           sort_sets = FALSE,
+           #sort_intersections_by = "degree",
+           base_annotations = list(
+             'Intersection size'= (
+               intersection_size()
+               + ylim(c(0, 135))
+             )
+           ),
+           set_sizes = upset_set_size() + ylim(170, 0)
            #need to re-write the below consistent with ComplexUpset
       #nsets = length(mlm_bnk_sig),
       #sets = names(mlm_bnk_sig)[length(mlm_bnk_sig):1],
@@ -302,58 +373,56 @@ a <- upset(fromList(mlm_bnk_sig),
 a
 
 #need to do psnps
-mlm_bnk_psnp <- c(gwas_mlm_list_psnp_snps, gwas_blink_list_psnp_snps)
+mlm_bnk_psnp <- full_join(
+  gwas_mlm_psnp_snps |>
+    pivot_longer(starts_with("MLM"),
+                 names_to = "method_phenotype",
+                 values_to = "yes_no"
+    ),
+  gwas_blink_psnp_snps |>
+    pivot_longer(starts_with("BLINK"),
+                 names_to = "method_phenotype",
+                 values_to = "yes_no"
+    )
+) |>
+  pivot_wider(names_from = method_phenotype, values_from = yes_no) |>
+  mutate(across(matches("^MLM|^BLINK"), ~ replace_na(.x, 0)))  
 
-mlm_bnk_psnp_table <- list_rbind(
-  list(
-    list_rbind(gwas_blink_list_psnp, names_to = "analysis"),
-    list_rbind(gwas_mlm_list_psnp, names_to = "analysis")
-  )
-)
-write.csv(mlm_bnk_psnp_table, "mlm_blink_psnp.csv")
+# mlm_bnk_psnp_table <- list_rbind(
+#   list(
+#     list_rbind(gwas_blink_list_psnp, names_to = "analysis"),
+#     list_rbind(gwas_mlm_list_psnp, names_to = "analysis")
+#   )
+# )
+# write.csv(mlm_bnk_psnp_table, "mlm_blink_psnp.csv")
 
-distinct(mlm_bnk_psnp_table, SNP, Chromosome, Position) |>
+distinct(mlm_bnk_psnp, SNP:Position) |>
   arrange(Chromosome, Position)
 
 names(mlm_bnk_psnp) <- str_replace_all(names(mlm_bnk_psnp), "_", " ")
-b <- upset(upsetr::fromList(mlm_bnk_psnp),
-           nsets = length(mlm_bnk_psnp),
-           #sets = names(mlm_bnk_psnp)[length(mlm_bnk_psnp):1],
-           sets = c("MLM density", "MLM length", "MLM width",
-                    "MLM cvars", "MLM field",
-                    "MLM gh", "MLM meta",
-                    "BLINK density", "BLINK length", "BLINK width",
-                    "BLINK cvars", "BLINK field", "BLINK gh", "BLINK meta"
+
+b <- upset(mlm_bnk_psnp,
+           intersect = c("BLINK density", "BLINK length", "BLINK width",
+                         "BLINK cvars", "BLINK field", "BLINK gh", "BLINK meta",
+                         "MLM density", "MLM length", "MLM width",
+                         "MLM cvars", "MLM field", "MLM gh", "MLM meta"
            ),
-           keep.order = TRUE,
-           mainbar.y.max = 135,
-           order.by = c("freq"), decreasing = FALSE,
-           sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 7),
-           set_size.show = TRUE,
-           set_size.scale_max = 165,
-           set_sizes = (upset_set_size() + xlim(-20, 165))
+           sort_sets = FALSE,
+           #sort_intersections_by = "degree",
+           base_annotations = list(
+             'Intersection size'= (
+               intersection_size()
+               + ylim(c(0, 135))
+             )
+           ),
+           set_sizes = upset_set_size() + ylim(170, 0)
 )
 
 b
 
-pdf("blink_mlm_upset.pdf", paper = "a4")
+pdf("mlm_blink_upset.pdf", w = 320/25.8, h = 320/25.8)
 
-(
-(plot_spacer() + wrap_elements(a$Main_bar) + plot_layout(widths = c(1, 3))) /
-    (
-      wrap_elements(a$Sizes) +
-       (wrap_elements(a$Matrix) / plot_spacer() + plot_layout(heights = c(10, 1))) +
-       plot_layout(widths = c(1, 3))
-     )
-) /
-  (
-    (plot_spacer() + wrap_elements(b$Main_bar) + plot_layout(widths = c(1, 3))) /
-  (
-    wrap_elements(b$Sizes) +
-     (wrap_elements(b$Matrix) / plot_spacer() + plot_layout(heights = c(10, 1))) +
-    plot_layout(widths = c(6, 3))
-  )
-  ) +
-  plot_layout(heights = c(1, 1, 2))
+a / b
 
 dev.off()  
+
