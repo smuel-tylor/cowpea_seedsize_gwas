@@ -1,7 +1,6 @@
+library(ComplexUpset)
 library(tidyverse)
 library(patchwork)
-library(ComplexUpset)
-#library(UpSetR)
 
 read_blink <- \(fp){
   read.csv(fp) |>
@@ -11,23 +10,23 @@ read_blink <- \(fp){
              str_extract(fp, "Blink.([A-Za-z]+).GWAS", group = 1)
            ),
            Trait = case_match(Trait,
-             "Seeddensity" ~ "density",
-             "Average10seedslength" ~ "length",
-             "SeedWeightCVARS" ~ "cvars",
-             "SeedWeightField" ~ "field",
-             "SeedWeightGH" ~ "gh",
-             "Average10seedswidth" ~ "width"
+                              "Seeddensity" ~ "density",
+                              "Average10seedslength" ~ "length",
+                              "SeedWeightCVARS" ~ "cvars",
+                              "SeedWeightField" ~ "field",
+                              "SeedWeightGH" ~ "gh",
+                              "Average10seedswidth" ~ "width"
            )
-           )
+    )
 }
 
 blink_dirs <- str_c("copy_of_MWK_dir/GWAS_Results/Seed ",
-                  c("Density", "Length",
-                    "weight CVARS", "weight Field", "weight GH",
-                    "width"
+                    c("Density", "Length",
+                      "weight CVARS", "weight Field", "weight GH",
+                      "width"
                     ),
-                  "/GAPIT"
-                  )
+                    "/GAPIT"
+)
 
 blink_fp <- map_chr(blink_dirs, \(x) list.files(x, full.names = TRUE))
 
@@ -57,8 +56,8 @@ probit_meta <- \(gwas_list){
     mutate(across(contains("P.value"), z_squared, .names = "{.col}_z_sq"),
            meta_Chi_sq = rowSums(across(contains("z_sq"))),
            meta_P.value = pchisq(meta_Chi_sq,
-                                        length(gwas_list),
-                                        lower.tail = FALSE
+                                 length(gwas_list),
+                                 lower.tail = FALSE
            ),
            meta_neg_log10p = -log(meta_P.value, base = 10)
     )
@@ -66,23 +65,23 @@ probit_meta <- \(gwas_list){
 
 gwas_blink_list$BLINK_meta <- probit_meta(
   gwas_blink_list[c("BLINK_cvars", "BLINK_field", "BLINK_gh")]
-  ) |>
+) |>
   select(c("SNP", "Chromosome", "Position", "meta_P.value", "meta_neg_log10p")
-         ) |>
+  ) |>
   rename(P.value = meta_P.value,
          neg_log10p = meta_neg_log10p
-         )
+  )
 
 #what is n for bonferroni
 n_bfc <- unique(map_vec(gwas_blink_list, nrow))
 
 gwas_blink_list |>
-map(\(x) arrange(x, Chromosome, Position) |>
-  mutate(Position_G = cumsum(Position)) |>
-ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
-  geom_point() +
-  ylim(0, 25)
-)
+  map(\(x) arrange(x, Chromosome, Position) |>
+        mutate(Position_G = cumsum(Position)) |>
+        ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
+        geom_point() +
+        ylim(0, 25)
+  )
 #There's an Inf in the mix from the meta-analysis...
 gwas_blink_list$BLINK_meta |> filter(neg_log10p > 15)
 
@@ -140,13 +139,6 @@ gwas_blink_list_psnp <- gwas_blink_list_mta |>
         as.data.frame()
   )
 
-<<<<<<< HEAD
-gwas_blink_list_sig_snps <- map(gwas_blink_list_sig, \(x) x[ , "SNP"])
-
-ur <- UpSetR::fromList(gwas_blink_list_sig_snps)
-upset(ur,
-      intersect = names(ur)
-=======
 #reformat and use complexupset
 gwas_blink_sig_snps <- gwas_blink_list_sig |>
   list_rbind(names_to = "method_phenotype") |>
@@ -154,16 +146,14 @@ gwas_blink_sig_snps <- gwas_blink_list_sig |>
   pivot_wider(names_from = method_phenotype, values_from = mta) |>
   mutate(across(starts_with("BLINK"),
                 ~ ifelse(.x == "sig", 1, 0) |> replace_na(0)
-                )
-         )
+  )
+  )
 
 upset(gwas_blink_sig_snps,
       intersect = c("BLINK_density", "BLINK_length", "BLINK_width",
                     "BLINK_cvars", "BLINK_field", "BLINK_gh", "BLINK_meta"
       )
->>>>>>> 880c15b53e881cc668f46d226c714ab8c549e91f
-      )
-#not working - is it an R update issue?
+)
 
 gwas_blink_psnp_snps <- gwas_blink_list_psnp |>
   list_rbind(names_to = "method_phenotype") |>
@@ -189,18 +179,18 @@ read_tassel <- function(fp){
            Chromosome = Chr,
            Position = Pos,
            P.value = p
-           ) |>
+    ) |>
     mutate(neg_log10p = -log(P.value, base = 10),
            Position = as.numeric(Position)
-           )
+    )
 }
 
 mlm_dirs <- str_c("copy_of_MWK_dir/GWAS_Results/Seed ",
-                    c("Density", "Length",
-                      "weight CVARS", "weight Field", "weight GH",
-                      "width"
-                    ),
-                    "/Tassel"
+                  c("Density", "Length",
+                    "weight CVARS", "weight Field", "weight GH",
+                    "width"
+                  ),
+                  "/Tassel"
 )
 
 mlm_fp <- map_chr(mlm_dirs, list.files, full.names = TRUE)
@@ -208,8 +198,8 @@ mlm_fp <- map_chr(mlm_dirs, list.files, full.names = TRUE)
 gwas_mlm_list <- map(mlm_fp, \(x) read_tassel(x) |>
                        select(c("SNP", "Chromosome", "Position",
                                 "P.value", "neg_log10p"
-                                )
-                              )
+                       )
+                       )
 )
 
 names(gwas_mlm_list) <- str_c(
@@ -235,15 +225,15 @@ gwas_mlm_list_mta <- gwas_mlm_list |>
                #this is slightly larger than 5.92
                mta = ifelse(neg_log10p > -log(0.05 / n_bfc, base = 10),
                             "sig", "ns"),
-               )
+        )
   )
 
 gwas_mlm_list_mta |>
-        map(\(x) x|>
-            ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
+  map(\(x) x|>
+        ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
         geom_point() +
         ylim(0, 25)
-        )
+  )
 
 #This confirms that old psnp analysis was inappropriate
 #11 p-snps should be present in just this segment of chr3
@@ -332,13 +322,13 @@ mlm_bnk_sig <- full_join(
     pivot_longer(starts_with("MLM"),
                  names_to = "method_phenotype",
                  values_to = "yes_no"
-                 ),
+    ),
   gwas_blink_sig_snps |>
     pivot_longer(starts_with("BLINK"),
                  names_to = "method_phenotype",
                  values_to = "yes_no"
     )
-  ) |>
+) |>
   pivot_wider(names_from = method_phenotype, values_from = yes_no) |>
   mutate(across(matches("^MLM|^BLINK"), ~ replace_na(.x, 0)))  
 
@@ -361,13 +351,13 @@ a <- upset(mlm_bnk_sig,
            ),
            set_sizes = upset_set_size() + ylim(170, 0)
            #need to re-write the below consistent with ComplexUpset
-      #nsets = length(mlm_bnk_sig),
-      #sets = names(mlm_bnk_sig)[length(mlm_bnk_sig):1],
-      #keep.order = TRUE,
-      #mainbar.y.max = 135,
-      #order.by = c("freq"),
-      #sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 7),
-      #set_size.scale_max = 170
+           #nsets = length(mlm_bnk_sig),
+           #sets = names(mlm_bnk_sig)[length(mlm_bnk_sig):1],
+           #keep.order = TRUE,
+           #mainbar.y.max = 135,
+           #order.by = c("freq"),
+           #sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 7),
+           #set_size.scale_max = 170
 )
 
 a
@@ -424,5 +414,4 @@ pdf("mlm_blink_upset.pdf", w = 320/25.8, h = 320/25.8)
 
 a / b
 
-dev.off()  
-
+dev.off()
