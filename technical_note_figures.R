@@ -59,7 +59,11 @@ probit_meta <- \(gwas_list){
                                         length(gwas_list),
                                         lower.tail = FALSE
            ),
-           meta_neg_log10p = -log(meta_P.value, base = 10)
+           #added a fix here because this was calculating p = 0
+           meta_neg_log10p = ifelse(meta_P.value != 0,
+                                    -log(meta_P.value, base = 10),
+                                    -log(2.22e-16, base = 10)
+           )
     )
 }
 
@@ -74,32 +78,38 @@ gwas_blink_list$BLINK_meta <- probit_meta(
 
 #what is n for bonferroni
 n_bfc <- unique(map_vec(gwas_blink_list, nrow))
+Chr_max <- gwas_blink_list[[1]] |>
+  arrange(Chromosome, Position) |>
+  group_by(Chromosome) |>
+  mutate(Chromosome_max = max(Position)) |>
+  ungroup() |>
+  distinct(Chromosome, Chromosome_max) |>
+  mutate(Chromosome_max_Genome = cumsum(Chromosome_max))
 
-gwas_blink_list |>
-map(\(x) arrange(x, Chromosome, Position) |>
-  mutate(Position_G = cumsum(Position)) |>
-ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
-  geom_point() +
-  ylim(0, 25)
-)
-#There's an Inf in the mix from the meta-analysis...
-gwas_blink_list$BLINK_meta |> filter(neg_log10p > 15)
+# gwas_blink_list |>
+# map(\(x) full_join(x, Chr_max) |>
+#       arrange(Chromosome, Position) |>
+#       mutate(Position_G = Chromosome_max_Genome - (Chromosome_max - Position)
+#              ) |>
+
 
 gwas_blink_list_mta <- gwas_blink_list |>
-  map(\(x) arrange(x, Chromosome, Position) |>
-        mutate(Position_G = cumsum(Position),
+  map(\(x) full_join(x, Chr_max) |>
+        arrange(x, Chromosome, Position) |>
+        mutate(Position_G = Chromosome_max_Genome - (Chromosome_max - Position),
                #this is slightly larger than 5.92
                mta = ifelse(neg_log10p > -log(0.05 / n_bfc, base = 10),
                             "sig", "ns"),
         )
   )
 
+#plot out Manhattan
 gwas_blink_list_mta |>
   map(\(x) x|>
-        ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
+        ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) +
         geom_point() +
-        ylim(0, 25)
-  )
+        ylim(0, 16)
+      )
 
 gwas_blink_list_sig <- gwas_blink_list_mta |>
   map(\(x) filter(x, mta == "sig"))
@@ -122,24 +132,30 @@ last_threshold <- \(x){
   x
 }
 
-gwas_blink_list_psnp <- gwas_blink_list_mta |>
-  map(last_threshold) |>
-  map(\(x) x |>
-        filter(mta == "sig") |>
-        group_by(last_threshold) |>
-        mutate(max_neg_log10p = max(neg_log10p),
-               psnp = ifelse(max_neg_log10p == neg_log10p,
-                             "psnp",
-                             "snp"
-               )
-        ) |>
-        ungroup() |>
-        filter(psnp == "psnp") |>
-        #this last transformation is needed to ensure upset works
-        as.data.frame()
-  )
+#function that then calls psnps based on this scan
+call_psnp <- \(x) x |>
+  filter(mta == "sig") |>
+  group_by(last_threshold) |>
+  #Here I'm making sure this value doesn't set to -Inf
+  # so that rbind will work later
+  mutate(max_neg_log10p = ifelse(max(neg_log10p) == -Inf, -1, max(neg_log10p)),
+         psnp = ifelse(max_neg_log10p == neg_log10p,
+                       "psnp",
+                       "snp"
+         )
+  ) |>
+  ungroup() |>
+  filter(psnp == "psnp") |>
+  mutate(psnp = as.character(psnp))
 
-#reformat and use complexupset
+#use these functions and generate a tibble
+gwas_blink_list_psnp <- gwas_blink_list_mta |>
+  map(\(x) split(x, factor(x$Chromosome))) |>
+  map_depth(2, last_threshold) |>
+  map_depth(2, call_psnp) |>
+  map_depth(1, list_rbind)
+
+#reformat and use complexupset to plot
 gwas_blink_sig_snps <- gwas_blink_list_sig |>
   list_rbind(names_to = "method_phenotype") |>
   select(-c(P.value:Trait)) |>
@@ -147,7 +163,8 @@ gwas_blink_sig_snps <- gwas_blink_list_sig |>
   mutate(across(starts_with("BLINK"),
                 ~ ifelse(.x == "sig", 1, 0) |> replace_na(0)
                 )
-         )
+         ) |>
+  as.data.frame()
 
 upset(gwas_blink_sig_snps,
       intersect = c("BLINK_density", "BLINK_length", "BLINK_width",
@@ -162,7 +179,19 @@ gwas_blink_psnp_snps <- gwas_blink_list_psnp |>
   mutate(across(starts_with("BLINK"),
                 ~ ifelse(.x == "psnp", 1, 0) |> replace_na(0)
   )
-  )
+  ) |>
+  as.data.frame()
+
+#check that all psnps are more distant than the LD threshold of 270 kb
+with(arrange(gwas_blink_psnp_snps, Position_G),
+     all(lead(Position_G) - Position_G > 2.7e5, na.rm = TRUE)
+     )
+#no, so I need to go through and select the highest scoring
+
+#
+#
+#
+
 
 upset(gwas_blink_psnp_snps,
       intersect = c("BLINK_density", "BLINK_length", "BLINK_width",
@@ -245,14 +274,6 @@ gwas_mlm_list_mta$MLM_meta |>
   ylim(0, 25) +
   xlim(1.4775e11, 1.483e11)
 
-# but checking with 
-mlm_bnk_psnp |> rename(Position_G = 3) |>
-  arrange(Position_G) |>
-  mutate(diff = lead(Position_G) - Position_G) |>
-  select(diff)
-#Suggests I have mad a mistake in re-analysing this,
-# because I didn't take account of the 270 kb linkage group
-
 gwas_mlm_list_sig <- gwas_mlm_list_mta |>
   map(\(x) filter(x, mta == "sig"))
 #should mean we now have different length sets in each element of the list
@@ -306,6 +327,11 @@ gwas_mlm_psnp_snps <- gwas_mlm_list_psnp |>
                 ~ ifelse(.x == "psnp", 1, 0) |> replace_na(0)
   )
   )
+
+#check all are > 270 kb apart (LD threshold)
+with(arrange(gwas_mlm_psnp_snps, Position_G),
+     all(lead(Position_G) - Position_G > 2.7e5, na.rm = TRUE)
+)
 
 head(gwas_mlm_psnp_snps)
 #need to manually reconstruct empty classes
@@ -377,6 +403,11 @@ mlm_bnk_psnp <- full_join(
 ) |>
   pivot_wider(names_from = method_phenotype, values_from = yes_no) |>
   mutate(across(matches("^MLM|^BLINK"), ~ replace_na(.x, 0)))  
+
+#check all are > 270 kb apart (LD threshold)
+with(arrange(mlm_bnk_psnp, Position_G),
+     lead(Position_G) - Position_G
+)
 
 # mlm_bnk_psnp_table <- list_rbind(
 #   list(
