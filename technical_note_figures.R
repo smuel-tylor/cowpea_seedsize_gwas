@@ -1,6 +1,7 @@
-library(ComplexUpset)
 library(tidyverse)
 library(patchwork)
+library(ComplexUpset)
+#library(UpSetR)
 
 read_blink <- \(fp){
   read.csv(fp) |>
@@ -154,9 +155,12 @@ gwas_blink_list_psnp <- gwas_blink_list_mta |>
   )
 
 gwas_blink_list_sig_snps <- map(gwas_blink_list_sig, \(x) x[ , "SNP"])
-upset(fromList(gwas_blink_list_sig_snps),
-      list(names(fromList(gwas_blink_list_sig_snps)))
+
+ur <- UpSetR::fromList(gwas_blink_list_sig_snps)
+upset(ur,
+      intersect = names(ur)
       )
+#not working - is it an R update issue?
 
 gwas_blink_list_psnp_snps <- map(gwas_blink_list_psnp, \(x) x[ , "SNP"])
 upset(fromList(gwas_blink_list_psnp_snps),
