@@ -179,6 +179,7 @@ upset(gwas_blink_sig_snps,
 )
 
 gwas_blink_psnp_snps <- gwas_blink_list_psnp |>
+  map_depth(1, \(x) arrange(x, Position_G)) |>
   list_rbind(names_to = "method_phenotype") |>
   select(-c(P.value:Trait, mta:max_neg_log10p)) |>
   pivot_wider(names_from = method_phenotype, values_from = psnp) |>
@@ -188,16 +189,14 @@ gwas_blink_psnp_snps <- gwas_blink_list_psnp |>
   ) |>
   as.data.frame()
 
-#check that all psnps are more distant than the LD threshold of 270 kb
-with(arrange(gwas_blink_psnp_snps, Position_G),
-     all(lead(Position_G) - Position_G > 2.7e5, na.rm = TRUE)
-     )
-#no, so I need to go through and select the highest scoring
-
-#choose psnp with maximum log10p
-#remove psnps within 270 kb
-#select psnp with next highest value
-
+#check that, on a trait-by-trait basis,
+# all psnps are more distant than the LD threshold of 270 kb
+map(gwas_blink_list_psnp, \(x) { x |>
+    arrange(Position_G) |>
+    filter(lead(Position_G) - Position_G < 2.7e5)
+}
+)
+#yes, so no need to process further
 
 upset(gwas_blink_psnp_snps,
       intersect = c("BLINK_density", "BLINK_length", "BLINK_width",
@@ -305,6 +304,15 @@ gwas_mlm_list_psnp <- gwas_mlm_list_mta[map_vec(gwas_mlm_list_sig, nrow) != 0] |
 #should mean we now have different length sets in each element of the list
 map_vec(gwas_mlm_list_psnp, nrow)
 
+#check that, on a trait-by-trait basis,
+# all psnps are more distant than the LD threshold of 270 kb
+map(gwas_mlm_list_psnp, \(x) { x |>
+    arrange(Position_G) |>
+    filter(lead(Position_G) - Position_G < 2.7e5)
+}
+)
+#yes, so no need to process further
+
 #reformat and use complexupset
 gwas_mlm_sig_snps <- gwas_mlm_list_sig |>
   list_rbind(names_to = "method_phenotype") |>
@@ -333,11 +341,6 @@ gwas_mlm_psnp_snps <- gwas_mlm_list_psnp |>
                 ~ ifelse(.x == "psnp", 1, 0) |> replace_na(0)
   )
   )
-
-#check all are > 270 kb apart (LD threshold)
-with(arrange(gwas_mlm_psnp_snps, Position_G),
-     all(lead(Position_G) - Position_G > 2.7e5, na.rm = TRUE)
-)
 
 head(gwas_mlm_psnp_snps)
 #need to manually reconstruct empty classes
@@ -410,10 +413,6 @@ mlm_bnk_psnp <- full_join(
   pivot_wider(names_from = method_phenotype, values_from = yes_no) |>
   mutate(across(matches("^MLM|^BLINK"), ~ replace_na(.x, 0)))  
 
-#check all are > 270 kb apart (LD threshold)
-with(arrange(mlm_bnk_psnp, Position_G),
-     lead(Position_G) - Position_G
-)
 
 # mlm_bnk_psnp_table <- list_rbind(
 #   list(
@@ -423,7 +422,7 @@ with(arrange(mlm_bnk_psnp, Position_G),
 # )
 # write.csv(mlm_bnk_psnp_table, "mlm_blink_psnp.csv")
 
-distinct(mlm_bnk_psnp, SNP:Position) |>
+distinct(mlm_bnk_psnp, SNP, Chromosome, Position) |>
   arrange(Chromosome, Position)
 
 names(mlm_bnk_psnp) <- str_replace_all(names(mlm_bnk_psnp), "_", " ")
@@ -452,3 +451,4 @@ pdf("mlm_blink_upset.pdf", w = 320/25.8, h = 320/25.8)
 a / b
 
 dev.off()
+
