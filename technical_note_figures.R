@@ -5,19 +5,22 @@ library(patchwork)
 read_blink <- \(fp){
   read.csv(fp) |>
     select(SNP:P.value) |>
-    mutate(neg_log10p = -log(P.value, base = 10),
-           Trait = str_to_lower(
-             str_extract(fp, "Blink.([A-Za-z]+).GWAS", group = 1)
-           ),
-           Trait = case_match(Trait,
-             "Seeddensity" ~ "density",
-             "Average10seedslength" ~ "length",
-             "SeedWeightCVARS" ~ "cvars",
-             "SeedWeightField" ~ "field",
-             "SeedWeightGH" ~ "gh",
-             "Average10seedswidth" ~ "width"
-           )
-           )
+    mutate(neg_log10p =  ifelse(P.value != 0,
+                                -log(P.value, base = 10),
+                                -log(2.22e-16, base = 10)
+    ),
+    Trait = str_to_lower(
+      str_extract(fp, "Blink.([A-Za-z]+).GWAS", group = 1)
+    ),
+    Trait = case_match(Trait,
+                       "Seeddensity" ~ "density",
+                       "Average10seedslength" ~ "length",
+                       "SeedWeightCVARS" ~ "cvars",
+                       "SeedWeightField" ~ "field",
+                       "SeedWeightGH" ~ "gh",
+                       "Average10seedswidth" ~ "width"
+    )
+    )
 }
 
 blink_dirs <- str_c("copy_of_MWK_dir/GWAS_Results/Seed ",
@@ -118,6 +121,7 @@ map_vec(gwas_blink_list_sig, nrow)
 
 #function that scans along sig column to id changes
 last_threshold <- \(x){
+  x <- arrange(x, Position_G)
   x[ , "last_threshold"] <- rep(NA, nrow(x))
   for (i in 1:nrow(x)){
     x[i, "last_threshold"] <- ifelse(i == 1,
@@ -132,21 +136,31 @@ last_threshold <- \(x){
   x
 }
 
-#function that then calls psnps based on this scan
+#function that calls psnps based on last threshold and LD threshold of 2.7e5
 call_psnp <- \(x) x |>
   filter(mta == "sig") |>
   group_by(last_threshold) |>
   #Here I'm making sure this value doesn't set to -Inf
   # so that rbind will work later
-  mutate(max_neg_log10p = ifelse(max(neg_log10p) == -Inf, -1, max(neg_log10p)),
-         psnp = ifelse(max_neg_log10p == neg_log10p,
-                       "psnp",
-                       "snp"
+  
+  ######
+###not working...
+#########
+  mutate(max_neg_log10p = max(neg_log10p),
+         fd = lead(Position) - Position,
+         rd = Position - lag(Position),
+         psnp = as.character(
+           ifelse(
+             any(max_neg_log10p == neg_log10p &
+                   all(fd > 2.7e5 | is.na(fd), rd > 2.7e5 | is.na(rd))
+                 ),
+             "psnp",
+             "snp"
+             )
          )
   ) |>
   ungroup() |>
-  filter(psnp == "psnp") |>
-  mutate(psnp = as.character(psnp))
+  filter(psnp == "psnp")
 
 #use these functions and generate a tibble
 gwas_blink_list_psnp <- gwas_blink_list_mta |>
@@ -188,7 +202,9 @@ with(arrange(gwas_blink_psnp_snps, Position_G),
      )
 #no, so I need to go through and select the highest scoring
 
-#
+#function that excludes additional psnsps on the basis of 270 kb LD threshold
+
+
 #
 #
 
