@@ -138,11 +138,13 @@ last_threshold <- \(x){
   x
 }
 
-#function that calls psnps based on last threshold and LD threshold of 2.7e5
+#function that calls psnps based on this scan
 call_psnp <- \(x) x |>
   filter(mta == "sig") |>
   group_by(last_threshold) |>
-  mutate(max_neg_log10p = max(neg_log10p),
+  #Here I'm making sure this value doesn't set to -Inf
+  # so that rbind will work later
+  mutate(max_neg_log10p = ifelse(max(neg_log10p) == -Inf, -1, max(neg_log10p)),
          psnp = as.character(
            ifelse(max_neg_log10p == neg_log10p, "psnp", "snp")
          )
