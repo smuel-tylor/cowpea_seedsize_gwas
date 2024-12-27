@@ -5,20 +5,24 @@ library(patchwork)
 read_blink <- \(fp){
   read.csv(fp) |>
     select(SNP:P.value) |>
-    mutate(neg_log10p = -log(P.value, base = 10),
-           Trait = str_to_lower(
-             str_extract(fp, "Blink.([A-Za-z]+).GWAS", group = 1)
-           ),
-           Trait = case_match(Trait,
-                              "Seeddensity" ~ "density",
-                              "Average10seedslength" ~ "length",
-                              "SeedWeightCVARS" ~ "cvars",
-                              "SeedWeightField" ~ "field",
-                              "SeedWeightGH" ~ "gh",
-                              "Average10seedswidth" ~ "width"
-           )
-    ) |>
-    arrange(Chromosome, Position)
+    arrange(Chromosome, Position) |>
+    #ensure there are no Inf in the -log10(p) calculations
+    mutate(neg_log10p =  ifelse(P.value != 0,
+                                -log(P.value, base = 10),
+                                -log(2.22e-16, base = 10)
+    ),
+    Trait = str_to_lower(
+      str_extract(fp, "Blink.([A-Za-z]+).GWAS", group = 1)
+    ),
+    Trait = case_match(Trait,
+                       "Seeddensity" ~ "density",
+                       "Average10seedslength" ~ "length",
+                       "SeedWeightCVARS" ~ "cvars",
+                       "SeedWeightField" ~ "field",
+                       "SeedWeightGH" ~ "gh",
+                       "Average10seedswidth" ~ "width"
+    )
+    )
 }
 
 blink_dirs <- str_c("copy_of_MWK_dir/GWAS_Results/Seed ",
@@ -95,14 +99,6 @@ Chr_max <- gwas_blink_list[[1]] |>
 #       mutate(Position_G = Chromosome_max_Genome - (Chromosome_max - Position)
 #              ) |>
 
-# gwas_blink_list |>
-#   map(\(x) arrange(x, Chromosome, Position) |>
-#         mutate(Position_G = cumsum(Position)) |>
-#         ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
-#         geom_point() +
-#         ylim(0, 25)
-#   )
-
 gwas_blink_list_mta <- gwas_blink_list |>
   map(\(x) full_join(x, Chr_max) |>
         arrange(Chromosome, Position) |>
@@ -151,21 +147,19 @@ last_threshold <- \(x){
   return(x)
 }
 
-#function that then calls psnps based on this scan
+#function that calls psnps based on this scan
 call_psnp <- \(x) x |>
   filter(mta == "sig") |>
   group_by(last_threshold) |>
   #Here I'm making sure this value doesn't set to -Inf
   # so that rbind will work later
   mutate(max_neg_log10p = ifelse(max(neg_log10p) == -Inf, -1, max(neg_log10p)),
-         psnp = ifelse(max_neg_log10p == neg_log10p,
-                       "psnp",
-                       "snp"
+         psnp = as.character(
+           ifelse(max_neg_log10p == neg_log10p, "psnp", "snp")
          )
   ) |>
   ungroup() |>
-  filter(psnp == "psnp") |>
-  mutate(psnp = as.character(psnp))
+  filter(psnp == "psnp")
 
 #use these functions and generate a tibble
 gwas_blink_list_psnp <- gwas_blink_list_mta |>
