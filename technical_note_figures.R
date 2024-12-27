@@ -17,7 +17,8 @@ read_blink <- \(fp){
                               "SeedWeightGH" ~ "gh",
                               "Average10seedswidth" ~ "width"
            )
-    )
+    ) |>
+    arrange(Chromosome, Position)
 }
 
 blink_dirs <- str_c("copy_of_MWK_dir/GWAS_Results/Seed ",
@@ -67,6 +68,7 @@ probit_meta <- \(gwas_list){
     )
 }
 
+#And now we tack on the meta-analysis result to the rest of the GWAS outcomes
 gwas_blink_list$BLINK_meta <- probit_meta(
   gwas_blink_list[c("BLINK_cvars", "BLINK_field", "BLINK_gh")]
 ) |>
@@ -78,6 +80,7 @@ gwas_blink_list$BLINK_meta <- probit_meta(
 
 #what is n for bonferroni
 n_bfc <- unique(map_vec(gwas_blink_list, nrow))
+#generate absolute positions on genome
 Chr_max <- gwas_blink_list[[1]] |>
   arrange(Chromosome, Position) |>
   group_by(Chromosome) |>
@@ -92,17 +95,17 @@ Chr_max <- gwas_blink_list[[1]] |>
 #       mutate(Position_G = Chromosome_max_Genome - (Chromosome_max - Position)
 #              ) |>
 
-gwas_blink_list |>
-  map(\(x) arrange(x, Chromosome, Position) |>
-        mutate(Position_G = cumsum(Position)) |>
-        ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
-        geom_point() +
-        ylim(0, 25)
-  )
+# gwas_blink_list |>
+#   map(\(x) arrange(x, Chromosome, Position) |>
+#         mutate(Position_G = cumsum(Position)) |>
+#         ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
+#         geom_point() +
+#         ylim(0, 25)
+#   )
 
 gwas_blink_list_mta <- gwas_blink_list |>
   map(\(x) full_join(x, Chr_max) |>
-        arrange(x, Chromosome, Position) |>
+        arrange(Chromosome, Position) |>
         mutate(Position_G = Chromosome_max_Genome - (Chromosome_max - Position),
                #this is slightly larger than 5.92
                mta = ifelse(neg_log10p > -log(0.05 / n_bfc, base = 10),
@@ -110,7 +113,14 @@ gwas_blink_list_mta <- gwas_blink_list |>
         )
   )
 
-#plot out Manhattan
+#write a file with all the SNPs listed
+SNPs <- gwas_blink_list_mta[[1]] |>
+  select(SNP:Position, Position_G) |>
+  arrange(Position_G)
+
+write.csv(SNPs, "SNPs.csv", row.names = FALSE)
+
+#plot out Manhattans
 gwas_blink_list_mta |>
   map(\(x) x|>
         ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) +
@@ -124,7 +134,9 @@ gwas_blink_list_sig <- gwas_blink_list_mta |>
 map_vec(gwas_blink_list_sig, nrow)
 
 #function that scans along sig column to id changes
+#1224, added failsafe arrange to make sure ordering is correct
 last_threshold <- \(x){
+  x <- arrange(x, Position_G)
   x[ , "last_threshold"] <- rep(NA, nrow(x))
   for (i in 1:nrow(x)){
     x[i, "last_threshold"] <- ifelse(i == 1,
@@ -136,7 +148,7 @@ last_threshold <- \(x){
                                      )
     )
   }
-  x
+  return(x)
 }
 
 #function that then calls psnps based on this scan
@@ -203,6 +215,7 @@ upset(gwas_blink_psnp_snps,
                     "BLINK_cvars", "BLINK_field", "BLINK_gh", "BLINK_meta"
       )
 )
+#essentially consistent with snps
 
 #MLM
 read_tassel <- function(fp){
@@ -216,7 +229,8 @@ read_tassel <- function(fp){
     ) |>
     mutate(neg_log10p = -log(P.value, base = 10),
            Position = as.numeric(Position)
-    )
+    ) |>
+    arrange(Chromosome, Position)
 }
 
 mlm_dirs <- str_c("copy_of_MWK_dir/GWAS_Results/Seed ",
@@ -241,6 +255,7 @@ names(gwas_mlm_list) <- str_c(
   c("density", "length", "cvars", "field", "gh", "width")
 )
 
+#add meta-analysis outcomes
 gwas_mlm_list$MLM_meta <- probit_meta(
   gwas_mlm_list[c("MLM_cvars", "MLM_field", "MLM_gh")]
 ) |>
@@ -252,10 +267,19 @@ gwas_mlm_list$MLM_meta <- probit_meta(
 
 #what is n for bonferroni
 unique(map_vec(gwas_mlm_list, nrow)) == n_bfc
+#generate absolute positions on genome
+Chr_max_mlm <- gwas_mlm_list[[1]] |>
+  arrange(Chromosome, Position) |>
+  group_by(Chromosome) |>
+  mutate(Chromosome_max = max(Position)) |>
+  ungroup() |>
+  distinct(Chromosome, Chromosome_max) |>
+  mutate(Chromosome_max_Genome = cumsum(Chromosome_max))
 
 gwas_mlm_list_mta <- gwas_mlm_list |>
-  map(\(x) arrange(x, Chromosome, Position) |>
-        mutate(Position_G = cumsum(Position),
+  map(\(x) full_join(x, Chr_max_mlm) |>
+        arrange(Chromosome, Position) |>
+        mutate(Position_G = Chromosome_max_Genome - (Chromosome_max - Position),
                #this is slightly larger than 5.92
                mta = ifelse(neg_log10p > -log(0.05 / n_bfc, base = 10),
                             "sig", "ns"),
@@ -277,7 +301,7 @@ gwas_mlm_list_mta$MLM_meta |>
   ggplot(aes(Position_G, neg_log10p, colour = Chromosome)) + 
   geom_line() +
   ylim(0, 25) +
-  xlim(1.4775e11, 1.483e11)
+  xlim(7.67e7, 7.83e7)
 
 gwas_mlm_list_sig <- gwas_mlm_list_mta |>
   map(\(x) filter(x, mta == "sig"))
@@ -301,7 +325,7 @@ gwas_mlm_list_psnp <- gwas_mlm_list_mta[map_vec(gwas_mlm_list_sig, nrow) != 0] |
         as.data.frame()
   )
 
-#should mean we now have different length sets in each element of the list
+#check lengths
 map_vec(gwas_mlm_list_psnp, nrow)
 
 #check that, on a trait-by-trait basis,
@@ -311,7 +335,71 @@ map(gwas_mlm_list_psnp, \(x) { x |>
     filter(lead(Position_G) - Position_G < 2.7e5)
 }
 )
-#yes, so no need to process further
+#no, many of these are in linkage, so I need to filter them out
+
+#function to identify which are true, LD corrected P-SNPs
+keep_psnps <- \(x){
+  if(nrow(x) == 1){ return(x) } else {
+    x <- mutate(x,
+                psnp = NA,
+                Position_G_plus270 = Position_G + 2.7e5,
+                Position_G_minus270 = Position_G - 2.7e5
+    )
+    print(x)
+    #print(any(x$psnp == "psnp", na.rm = TRUE))
+    repeat {
+      if (all(is.na(x$psnp))) {
+        PGnext <- filter(x, neg_log10p == max(neg_log10p)) |>
+          select(Position_G) |>
+          slice_head() |> #needed to prevent multiples with same neg_log10p
+          as.vector()
+      } else {
+        PGnext <- filter(x, is.na(psnp)) |>
+          filter(neg_log10p == max(neg_log10p)) |>
+          select(Position_G) |>
+          slice_head() |> #needed to prevent multiples with same neg_log10p
+          as.vector()
+      }
+      
+      print(PGnext)
+      x <- mutate(x,
+                  psnp = case_when(
+                    psnp == "psnp" | Position_G == PGnext ~ "psnp",
+                    .default = NA)
+      )
+      
+      print(x)
+      
+      #realised this was unnecessary, because it just finds PGnext
+      # PG <- filter(x, psnp == "psnp") |>
+      #   filter(neg_log10p == min(neg_log10p)) |>
+      #   select(Position_G) |>
+      #   as.vector()
+      
+      x <- filter(x,
+                  !is.na(psnp) |
+                    (Position_G_plus270 < PGnext &
+                       Position_G_minus270 < PGnext) |
+                    (Position_G_plus270 > PGnext &
+                       Position_G_minus270 > PGnext)
+      )
+      
+      if (all(!is.na(x$psnp))) { break }
+    }
+    
+    return(x)
+    
+  }
+  
+}
+
+gwas_mlm_list_psnp2 <- gwas_mlm_list_psnp |>
+  map_depth(1, \(x) split(x, ~ Chromosome)) |>
+  map_depth(2, keep_psnps) |>
+  map_depth(1, \(x) list_rbind(x, names_to = "Chromosome"))
+
+map_vec(gwas_mlm_list_psnp, nrow)
+map_vec(gwas_mlm_list_psnp2, nrow)
 
 #reformat and use complexupset
 gwas_mlm_sig_snps <- gwas_mlm_list_sig |>
@@ -333,7 +421,7 @@ upset(gwas_mlm_sig_snps,
       )
 )
 
-gwas_mlm_psnp_snps <- gwas_mlm_list_psnp |>
+gwas_mlm_psnp_snps <- gwas_mlm_list_psnp2 |>
   list_rbind(names_to = "method_phenotype") |>
   select(-c(P.value:neg_log10p, mta:max_neg_log10p)) |>
   pivot_wider(names_from = method_phenotype, values_from = psnp) |>
@@ -363,21 +451,28 @@ mlm_bnk_sig <- full_join(
                  names_to = "method_phenotype",
                  values_to = "yes_no"
     )
-) |>
+)
+
+#write a file with all the mtas listed
+write.csv(mlm_bnk_sig, "mlm_blink_mta.csv", row.names = FALSE)
+
+mlm_bnk_sig_wide <- mlm_bnk_sig |>
   pivot_wider(names_from = method_phenotype, values_from = yes_no) |>
-  mutate(across(matches("^MLM|^BLINK"), ~ replace_na(.x, 0)))  
+  mutate(across(matches("^MLM|^BLINK"), ~ replace_na(.x, 0)))
+
 
 #To enable pretty plotting, remove underscores in names
-names(mlm_bnk_sig) <- str_replace_all(names(mlm_bnk_sig), "_", " ")
+names(mlm_bnk_sig_wide) <- str_replace_all(names(mlm_bnk_sig_wide), "_", " ")
 
-a <- upset(mlm_bnk_sig,
+a <- upset(mlm_bnk_sig_wide,
            intersect = c("BLINK density", "BLINK length", "BLINK width",
                          "BLINK cvars", "BLINK field", "BLINK gh", "BLINK meta",
                          "MLM density", "MLM length", "MLM width",
                          "MLM cvars", "MLM field", "MLM gh", "MLM meta"
            ),
            sort_sets = FALSE,
-           #sort_intersections_by = "degree",
+           sort_intersections = "descending",
+           sort_intersections_by = "cardinality",
            base_annotations = list(
              'Intersection size'= (
                intersection_size()
@@ -400,6 +495,7 @@ a
 #need to do psnps
 mlm_bnk_psnp <- full_join(
   gwas_mlm_psnp_snps |>
+    select(-contains("270")) |>
     pivot_longer(starts_with("MLM"),
                  names_to = "method_phenotype",
                  values_to = "yes_no"
@@ -413,17 +509,8 @@ mlm_bnk_psnp <- full_join(
   pivot_wider(names_from = method_phenotype, values_from = yes_no) |>
   mutate(across(matches("^MLM|^BLINK"), ~ replace_na(.x, 0)))  
 
-
-# mlm_bnk_psnp_table <- list_rbind(
-#   list(
-#     list_rbind(gwas_blink_list_psnp, names_to = "analysis"),
-#     list_rbind(gwas_mlm_list_psnp, names_to = "analysis")
-#   )
-# )
-# write.csv(mlm_bnk_psnp_table, "mlm_blink_psnp.csv")
-
-distinct(mlm_bnk_psnp, SNP, Chromosome, Position) |>
-  arrange(Chromosome, Position)
+distinct(mlm_bnk_psnp, SNP, Chromosome, Position_G) |>
+  arrange(Chromosome, Position_G)
 
 names(mlm_bnk_psnp) <- str_replace_all(names(mlm_bnk_psnp), "_", " ")
 
@@ -434,11 +521,12 @@ b <- upset(mlm_bnk_psnp,
                          "MLM cvars", "MLM field", "MLM gh", "MLM meta"
            ),
            sort_sets = FALSE,
-           #sort_intersections_by = "degree",
+           sort_intersections = "descending",
+           sort_intersections_by = "cardinality",
            base_annotations = list(
              'Intersection size'= (
                intersection_size()
-               + ylim(c(0, 135))
+               + ylim(c(0, 13.5))
              )
            ),
            set_sizes = upset_set_size() + ylim(170, 0)
@@ -451,4 +539,14 @@ pdf("mlm_blink_upset.pdf", w = 320/25.8, h = 320/25.8)
 a / b
 
 dev.off()
+
+mlm_bnk_psnp_table <- list_rbind(
+  list(
+    list_rbind(gwas_blink_list_psnp, names_to = "method_phenotype"),
+    list_rbind(gwas_mlm_list_psnp2, names_to = "method_phenotype") |>
+      select(-contains("270"))
+  )
+)
+
+write.csv(mlm_bnk_psnp_table, "mlm_blink_psnp.csv", row.names = FALSE)
 
