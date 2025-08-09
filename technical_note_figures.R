@@ -544,3 +544,74 @@ mlm_bnk_psnp_table <- list_rbind(
 
 write.csv(mlm_bnk_psnp_table, "mlm_blink_psnp.csv", row.names = FALSE)
 
+#Supplemental Table 1
+mlm_bnk_sig |>
+  mutate(method = str_extract(method_phenotype, "(.+)_", 1),
+         phenotype = str_extract(method_phenotype, "_(.+)", 1)
+           ) |>
+  filter(phenotype != "meta", yes_no == 1) |>
+  select(SNP, Chromosome, Position, method, phenotype) |>
+  mutate(phenotype = case_match(phenotype,
+                     "cvars" ~ "Seed weight (CVARS)",
+                     "field" ~ "Seed weight (UCR-CES)",
+                     "gh" ~ "Seed weight (GH)",
+                     "density" ~ "Seed density",
+                     "length" ~ "Seed length",
+                     "width" ~ "Seed width"
+                     )
+         )|>
+  pivot_wider(names_from = method,
+              values_from = phenotype,
+              values_fn = ~ str_flatten(.x, collapse = "/"),
+              values_fill = ""
+              ) |>
+  arrange(Chromosome, Position) |>
+  write.csv("Supplemental_Table1.csv", row.names = FALSE)
+
+#Supplemental Table 2
+mlm_bnk_sig |>
+  mutate(Method = str_extract(method_phenotype, "(.+)_", 1),
+         phenotype = str_extract(method_phenotype, "_(.+)", 1)
+  ) |>
+  filter(phenotype == "meta", yes_no == 1) |>
+  select(SNP, Chromosome, Position, Method, phenotype) |>
+  pivot_wider(names_from = phenotype,
+              values_from = Method,
+              values_fn = ~ str_flatten(.x, collapse = "/"),
+              values_fill = ""
+  ) |>
+  arrange(Chromosome, Position) |>
+  rename(Method = meta) |>
+  write.csv("Supplemental_Table2.csv", row.names = FALSE)
+
+#Supplemental Table 3
+mlm_bnk_psnp_table |>
+  mutate(method = str_extract(method_phenotype, "(.+)_", 1),
+         phenotype = str_extract(method_phenotype, "_(.+)", 1)
+  ) |>
+  select(SNP, Chromosome, Position, method, phenotype) |>
+  mutate(phenotype = case_match(phenotype,
+                                "cvars" ~ "Seed weight (CVARS)",
+                                "field" ~ "Seed weight (UCR-CES)",
+                                "gh" ~ "Seed weight (GH)",
+                                "meta" ~ "Seed weight (meta-analysis)",
+                                "density" ~ "Seed density",
+                                "length" ~ "Seed length",
+                                "width" ~ "Seed width"
+                                ),
+         phenotype = factor(phenotype, levels = c("Seed weight (meta-analysis)",
+                                   "Seed weight (CVARS)",	"Seed weight (GH)",
+                                   "Seed weight (UCR-CES)", "Seed density",
+                                   "Seed width",	"Seed length")
+                        )
+  )|>
+  arrange(phenotype) |>
+  pivot_wider(names_from = phenotype,
+              values_from = method,
+              values_fn = ~ str_flatten(.x, collapse = "/"),
+              values_fill = ""
+  ) |>
+  arrange(Chromosome, Position) |>
+  write.csv("Supplemental_Table3.csv", row.names = FALSE)
+
+
