@@ -464,24 +464,41 @@ a <- upset(mlm_bnk_sig_wide,
                          "MLM density", "MLM length", "MLM width",
                          "MLM cvars", "MLM field", "MLM gh", "MLM meta"
            ),
+           height_ratio = 1.25, width_ratio = 0.18,
+           stripes = upset_stripes(colors = "white"),
            sort_sets = FALSE,
            sort_intersections = "descending",
            sort_intersections_by = "cardinality",
            base_annotations = list(
              'Intersection size'= (
                intersection_size()
-               + ylim(c(0, 135))
+               + ylim(c(0, 125))
              )
            ),
-           set_sizes = upset_set_size() + ylim(170, 0)
-           #need to re-write the below consistent with ComplexUpset
-           #nsets = length(mlm_bnk_sig),
-           #sets = names(mlm_bnk_sig)[length(mlm_bnk_sig):1],
-           #keep.order = TRUE,
-           #mainbar.y.max = 135,
-           #order.by = c("freq"),
-           #sets.bar.color = rep(c(gray(0.2), gray(0.8)), each = 7),
-           #set_size.scale_max = 170
+           set_sizes = upset_set_size(position = "right") +
+             ylim(0, 220) +
+             geom_text(aes(label = ..count..),
+                       vjust = 0.5,
+                       hjust = -0.2,
+                       stat = 'count'
+                       ),
+           labeller = as_labeller(c(
+             "BLINK density" = "BLINK density",
+             "BLINK length" = "BLINK length",
+             "BLINK width" = "BLINK width",
+             "BLINK cvars" = "BLINK CVARS",
+             "BLINK field" = "BLINK UCR-CES",
+             "BLINK gh" = "BLINK GH",
+             "BLINK meta" = "BLINK meta",
+             "MLM density" = "MLM density",
+             "MLM length" = "MLM length",
+             "MLM width" = "MLM width",
+             "MLM cvars" = "MLM CVARS",
+             "MLM field" = "MLM UCR-CES",
+             "MLM gh" = "MLM GH",
+             "MLM meta" = "MLM meta"
+           ))
+
 )
 
 a
@@ -514,21 +531,46 @@ b <- upset(mlm_bnk_psnp,
                          "MLM density", "MLM length", "MLM width",
                          "MLM cvars", "MLM field", "MLM gh", "MLM meta"
            ),
+           height_ratio = 1.25, width_ratio = 0.18,
+           stripes = upset_stripes(colors = c("white", "white")),
            sort_sets = FALSE,
            sort_intersections = "descending",
            sort_intersections_by = "cardinality",
            base_annotations = list(
              'Intersection size'= (
                intersection_size()
-               + ylim(c(0, 13.5))
+               + ylim(c(0, 12.5))
              )
            ),
-           set_sizes = upset_set_size() + ylim(170, 0)
+           set_sizes = upset_set_size(position = "right") +
+             ylim(0, 220) +
+             geom_text(aes(label = ..count..),
+                       vjust = 0.5,
+                       hjust = -0.2,
+                       stat = 'count'
+                       ),
+           labeller = as_labeller(c(
+             "BLINK density" = "BLINK density",
+             "BLINK length" = "BLINK length",
+             "BLINK width" = "BLINK width",
+             "BLINK cvars" = "BLINK CVARS",
+             "BLINK field" = "BLINK UCR-CES",
+             "BLINK gh" = "BLINK GH",
+             "BLINK meta" = "BLINK meta",
+             "MLM density" = "MLM density",
+             "MLM length" = "MLM length",
+             "MLM width" = "MLM width",
+             "MLM cvars" = "MLM CVARS",
+             "MLM field" = "MLM UCR-CES",
+             "MLM gh" = "MLM GH",
+             "MLM meta" = "MLM meta"
+           ))
+           
 )
 
 b
 
-pdf("mlm_blink_upset.pdf", w = 320/25.8, h = 320/25.8)
+pdf("mlm_blink_upset.pdf", w = 210/25.8, h = 210/25.8)
 
 a / b
 
